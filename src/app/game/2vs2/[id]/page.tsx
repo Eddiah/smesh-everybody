@@ -1,0 +1,437 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useGameStore } from '@/store/gameStore';
+import {
+  isSetComplete,
+  getSetWinner,
+  needsTiebreak,
+  canAddGame,
+  getMatchWinner,
+  getSetsScore,
+  formatSetScore,
+  GAMES_TO_WIN_SET,
+} from '@/lib/scoring';
+import { CourtSurface } from '@/components/CourtCard';
+import type { Match2vs2, SetScore } from '@/types';
+
+export default function Match2vs2Page() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const { getGame, getPlayer, updateGame } = useGameStore();
+
+  const [hydrated, setHydrated] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  const match = getGame(params.id) as Match2vs2 | undefined;
+
+  const playerName = useCallback(
+    (id: string) => getPlayer(id)?.name ?? 'Unbekannt',
+    [getPlayer]
+  );
+
+  // Show completion modal when match ends
+  useEffect(() => {
+    if (match?.status === 'completed' && match.winner) {
+      setShowCompletionModal(true);
+    }
+  }, [match?.status, match?.winner]);
+
+  const currentSet: SetScore | null =
+    match && match.sets.length > 0
+      ? match.sets[match.sets.length - 1]
+      : null;
+
+  const currentSetIndex = match ? match.sets.length - 1 : 0;
+  const isTiebreak = currentSet ? needsTiebreak(currentSet) : false;
+  const currentSetComplete = currentSet ? isSetComplete(currentSet) : false;
+
+  const handleAddGame = useCallback(
+    (team: 1 | 2) => {
+      if (!match || match.status === 'completed') return;
+
+      updateGame(match.id, (game) => {
+        const m = { ...game } as Match2vs2;
+        const sets = m.sets.map((s) => ({ ...s, tiebreak: s.tiebreak ? { ...s.tiebreak } : undefined }));
+        const lastSet = { ...sets[sets.length - 1] };
+        if (lastSet.tiebreak) lastSet.tiebreak = { ...lastSet.tiebreak };
+
+        if (isSetComplete(lastSet)) return m;
+        if (!canAddGame(lastSet, team)) return m;
+
+        if (team === 1) lastSet.team1Games++;
+        else lastSet.team2Games++;
+
+        sets[sets.length - 1] = lastSet;
+        m.sets = sets;
+
+        // Check if this set is now complete
+        if (isSetComplete(lastSet)) {
+          const matchWinner = getMatchWinner(sets, m.setsToWin);
+          if (matchWinner) {
+            m.winner = matchWinner;
+            m.status = 'completed';
+          } else {
+            // Start new set
+            m.sets = [...sets, { team1Games: 0, team2Games: 0 }];
+          }
+        }
+
+        return m;
+      });
+    },
+    [match, updateGame]
+  );
+
+  const handleAddTiebreakPoint = useCallback(
+    (team: 1 | 2) => {
+      if (!match || match.status === 'completed') return;
+
+      updateGame(match.id, (game) => {
+        const m = { ...game } as Match2vs2;
+        const sets = m.sets.map((s) => ({ ...s, tiebreak: s.tiebreak ? { ...s.tiebreak } : undefined }));
+        const lastSet = { ...sets[sets.length - 1] };
+
+        if (!needsTiebreak(lastSet)) return m;
+        if (isSetComplete(lastSet)) return m;
+
+        // Initialize tiebreak if needed
+        if (!lastSet.tiebreak) {
+          lastSet.tiebreak = { team1Points: 0, team2Points: 0 };
+        } else {
+          lastSet.tiebreak = { ...lastSet.tiebreak };
+        }
+
+        if (team === 1) lastSet.tiebreak.team1Points++;
+        else lastSet.tiebreak.team2Points++;
+
+        // Check if tiebreak is won (7+ points, 2+ lead)
+        const { team1Points, team2Points } = lastSet.tiebreak;
+        const tiebreakWon =
+          (team1Points >= 7 && team1Points - team2Points >= 2) ||
+          (team2Points >= 7 && team2Points - team1Points >= 2);
+
+        if (tiebreakWon) {
+          // Set games stay at 7-6 or 6-7 based on tiebreak winner
+          if (team1Points > team2Points) {
+            lastSet.team1Games = 7;
+            lastSet.team2Games = 6;
+          } else {
+            lastSet.team1Games = 6;
+            lastSet.team2Games = 7;
+          }
+        }
+
+        sets[sets.length - 1] = lastSet;
+        m.sets = sets;
+
+        // If set complete, check match
+        if (isSetComplete(lastSet)) {
+          const matchWinner = getMatchWinner(sets, m.setsToWin);
+          if (matchWinner) {
+            m.winner = matchWinner;
+            m.status = 'completed';
+          } else {
+            m.sets = [...sets, { team1Games: 0, team2Games: 0 }];
+          }
+        }
+
+        return m;
+      });
+    },
+    [match, updateGame]
+  );
+
+  if (!hydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!match) {
+    return (
+      <div className="min-h-screen text-white flex flex-col items-center justify-center gap-4 px-4">
+        <p className="text-white/40 text-lg">Match nicht gefunden</p>
+        <Link
+          href="/"
+          className="btn-primary px-6 py-3 text-sm"
+        >
+          Zur Startseite
+        </Link>
+      </div>
+    );
+  }
+
+  const [team1SetsWon, team2SetsWon] = getSetsScore(match.sets);
+  const completedSets = match.sets.filter((s) => isSetComplete(s));
+  const activeSet = match.sets[match.sets.length - 1];
+  const isMatchComplete = match.status === 'completed';
+  const showTiebreak = activeSet && needsTiebreak(activeSet) && !isSetComplete(activeSet);
+
+  return (
+    <div className="min-h-screen text-white px-4 py-6 pb-24 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6 animate-fade-in-up stagger-1">
+        <button
+          onClick={() => router.push('/')}
+          className="glass-card-static w-10 h-10 rounded-full flex items-center justify-center hover:border-white/20 transition-all active:scale-95"
+        >
+          <svg className="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        {isMatchComplete && (
+          <span className="bg-violet-500/10 text-violet-400 px-4 py-1.5 rounded-full text-xs font-semibold border border-violet-500/20">
+            Abgeschlossen
+          </span>
+        )}
+      </div>
+
+      {/* Court with teams + sets score */}
+      <div className="mb-4 animate-fade-in-up stagger-2">
+        <CourtSurface accentColor="blue">
+          <div className="px-6 py-6">
+            {/* Team 1 */}
+            <div className="text-center mb-4">
+              <p className="text-xs text-blue-400 font-semibold uppercase tracking-wider mb-1">Team 1</p>
+              <p className="text-sm font-medium text-white/90">{playerName(match.team1[0])}</p>
+              <p className="text-sm font-medium text-white/90">{playerName(match.team1[1])}</p>
+            </div>
+
+            {/* Sets Score */}
+            <div className="py-4">
+              <p className="text-xs text-white/25 text-center uppercase tracking-widest mb-3">Sätze</p>
+              <div className="flex items-center justify-center gap-8">
+                <span className={`text-6xl font-black tabular-nums ${
+                  isMatchComplete && match.winner === 1 ? 'gradient-text-accent' : 'text-white/90'
+                }`}>
+                  {team1SetsWon}
+                </span>
+                <span className="text-2xl text-white/15 font-bold">–</span>
+                <span className={`text-6xl font-black tabular-nums ${
+                  isMatchComplete && match.winner === 2 ? 'gradient-text-accent' : 'text-white/90'
+                }`}>
+                  {team2SetsWon}
+                </span>
+              </div>
+            </div>
+
+            {/* Team 2 */}
+            <div className="text-center mt-4">
+              <p className="text-xs text-amber-400 font-semibold uppercase tracking-wider mb-1">Team 2</p>
+              <p className="text-sm font-medium text-white/90">{playerName(match.team2[0])}</p>
+              <p className="text-sm font-medium text-white/90">{playerName(match.team2[1])}</p>
+            </div>
+          </div>
+        </CourtSurface>
+      </div>
+
+      {/* Current set scoreboard */}
+      {!isMatchComplete && activeSet && (
+        <div className="glass-card-static rounded-2xl p-6 mb-4 animate-fade-in-up stagger-4">
+          <p className="text-xs text-white/25 text-center uppercase tracking-widest mb-3">
+            Satz {match.sets.length} – Spiele
+          </p>
+          <div className="flex items-center justify-center gap-10">
+            <span className="text-5xl font-black tabular-nums text-white/90">
+              {activeSet.team1Games}
+            </span>
+            <span className="text-xl text-white/15 font-bold">–</span>
+            <span className="text-5xl font-black tabular-nums text-white/90">
+              {activeSet.team2Games}
+            </span>
+          </div>
+
+          {/* Tiebreak score */}
+          {showTiebreak && activeSet.tiebreak && (
+            <div className="mt-4 pt-4 border-t border-white/6">
+              <div className="glass-card-static rounded-xl p-4 !border-amber-500/15 bg-amber-500/5">
+                <p className="text-xs text-amber-400 text-center font-semibold uppercase tracking-widest mb-2">
+                  Tiebreak
+                </p>
+                <div className="flex items-center justify-center gap-6">
+                  <span className="text-3xl font-bold tabular-nums text-amber-400">
+                    {activeSet.tiebreak.team1Points}
+                  </span>
+                  <span className="text-lg text-white/15 font-bold">–</span>
+                  <span className="text-3xl font-bold tabular-nums text-amber-400">
+                    {activeSet.tiebreak.team2Points}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Previous sets badges */}
+      {completedSets.length > 0 && (
+        <div className="flex items-center justify-center gap-2 mb-6 flex-wrap animate-fade-in-up stagger-5">
+          {completedSets.map((set, i) => {
+            const winner = getSetWinner(set);
+            return (
+              <div
+                key={i}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold ${
+                  winner === 1
+                    ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                    : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                }`}
+              >
+                <span className="text-white/25 mr-1">S{i + 1}</span>
+                {formatSetScore(set)}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Scoring buttons */}
+      {!isMatchComplete && (
+        <div className="space-y-3 mt-6 animate-fade-in-up stagger-6">
+          {showTiebreak ? (
+            <>
+              <p className="text-xs text-amber-400 text-center font-semibold uppercase tracking-widest">
+                Tiebreak – Tippe um Punkt hinzuzufügen
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => handleAddTiebreakPoint(1)}
+                  className="py-8 rounded-2xl btn-primary flex flex-col items-center justify-center"
+                >
+                  <span className="text-2xl font-bold block mb-1">+1 Punkt</span>
+                  <span className="text-xs opacity-70 font-medium">Team 1</span>
+                </button>
+                <button
+                  onClick={() => handleAddTiebreakPoint(2)}
+                  className="py-8 rounded-2xl btn-primary flex flex-col items-center justify-center"
+                >
+                  <span className="text-2xl font-bold block mb-1">+1 Punkt</span>
+                  <span className="text-xs opacity-70 font-medium">Team 2</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {activeSet && needsTiebreak(activeSet) && !activeSet.tiebreak ? (
+                /* 6-6 reached but tiebreak not initialized */
+                <button
+                  onClick={() => {
+                    updateGame(match.id, (game) => {
+                      const m = { ...game } as Match2vs2;
+                      const sets = m.sets.map((s) => ({
+                        ...s,
+                        tiebreak: s.tiebreak ? { ...s.tiebreak } : undefined,
+                      }));
+                      const lastSet = { ...sets[sets.length - 1] };
+                      lastSet.tiebreak = { team1Points: 0, team2Points: 0 };
+                      sets[sets.length - 1] = lastSet;
+                      m.sets = sets;
+                      return m;
+                    });
+                  }}
+                  className="w-full py-5 rounded-2xl font-bold text-base text-white transition-all active:scale-[0.98] shadow-lg shadow-amber-600/20"
+                  style={{
+                    background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 50%, #fbbf24 100%)',
+                    boxShadow: '0 4px 24px rgba(245, 158, 11, 0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
+                  }}
+                >
+                  🎯 Tiebreak starten (6-6)
+                </button>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleAddGame(1)}
+                    disabled={!!currentSet && !canAddGame(currentSet, 1)}
+                    className="py-8 rounded-2xl btn-primary flex flex-col items-center justify-center"
+                  >
+                    <span className="text-2xl font-bold block mb-1">+1 Spiel</span>
+                    <span className="text-xs opacity-70 font-medium">Team 1</span>
+                  </button>
+                  <button
+                    onClick={() => handleAddGame(2)}
+                    disabled={!!currentSet && !canAddGame(currentSet, 2)}
+                    className="py-8 rounded-2xl btn-primary flex flex-col items-center justify-center"
+                  >
+                    <span className="text-2xl font-bold block mb-1">+1 Spiel</span>
+                    <span className="text-xs opacity-70 font-medium">Team 2</span>
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Already completed - final result */}
+      {isMatchComplete && !showCompletionModal && (
+        <div className="glass-card-static rounded-3xl p-8 mt-6 text-center animate-fade-in-scale">
+          <div className="text-5xl mb-3">🏆</div>
+          <p className="gradient-text-accent font-bold text-xl mb-2">
+            Team {match.winner} gewinnt!
+          </p>
+          <p className="text-sm text-white/40">
+            {match.winner === 1
+              ? `${playerName(match.team1[0])} & ${playerName(match.team1[1])}`
+              : `${playerName(match.team2[0])} & ${playerName(match.team2[1])}`}
+          </p>
+          <Link
+            href="/"
+            className="inline-block mt-5 btn-primary px-8 py-3 text-sm"
+          >
+            Zurück zur Startseite
+          </Link>
+        </div>
+      )}
+
+      {/* Completion modal */}
+      {showCompletionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md px-6">
+          <div className="glass rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-fade-in-scale">
+            <div className="text-6xl mb-4">🏆</div>
+            <h2 className="text-2xl font-black gradient-text-accent mb-2">
+              Team {match.winner} gewinnt!
+            </h2>
+            <p className="text-white/60 mb-1 font-medium">
+              {match.winner === 1
+                ? `${playerName(match.team1[0])} & ${playerName(match.team1[1])}`
+                : `${playerName(match.team2[0])} & ${playerName(match.team2[1])}`}
+            </p>
+            <div className="flex items-center justify-center gap-2 mt-4 mb-6">
+              {match.sets.filter((s) => isSetComplete(s)).map((set, i) => (
+                <span
+                  key={i}
+                  className="glass-card-static text-white/60 px-3 py-1 rounded-full text-xs font-bold"
+                >
+                  {formatSetScore(set)}
+                </span>
+              ))}
+            </div>
+            <div className="space-y-2.5">
+              <Link
+                href="/"
+                className="block w-full btn-primary py-3.5 text-sm text-center"
+              >
+                Zurück zur Startseite
+              </Link>
+              <button
+                onClick={() => setShowCompletionModal(false)}
+                className="block w-full btn-secondary py-3.5 text-sm"
+              >
+                Ergebnis ansehen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

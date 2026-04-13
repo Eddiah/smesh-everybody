@@ -1,0 +1,389 @@
+'use client';
+
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useGameStore } from '@/store/gameStore';
+import { getAmericanoLeaderboard } from '@/lib/americano';
+import CourtCard from '@/components/CourtCard';
+import ScoreInput from '@/components/ScoreInput';
+import type { AmericanoTournament, AmericanoGame } from '@/types';
+
+type Tab = 'games' | 'standings';
+
+export default function AmericanoGrossLivePage() {
+  const params = useParams();
+  const router = useRouter();
+  const { getGame, updateGame, getPlayer } = useGameStore();
+
+  const id = params.id as string;
+  const tournament = getGame(id) as AmericanoTournament | undefined;
+
+  const [activeTab, setActiveTab] = useState<Tab>('games');
+
+  const totalRounds = useMemo(() => {
+    if (!tournament || tournament.games.length === 0) return 0;
+    return Math.max(...tournament.games.map((g) => g.round)) + 1;
+  }, [tournament]);
+
+  const allCompleted = useMemo(() => {
+    if (!tournament) return false;
+    return tournament.games.every((g) => g.status === 'completed');
+  }, [tournament]);
+
+  // Mark tournament completed when all games are done
+  useEffect(() => {
+    if (allCompleted && tournament && tournament.status !== 'completed') {
+      updateGame(id, (g) => ({
+        ...(g as AmericanoTournament),
+        status: 'completed',
+      }));
+    }
+  }, [allCompleted, tournament, id, updateGame]);
+
+  // Auto-advance current round
+  useEffect(() => {
+    if (!tournament || tournament.status === 'completed') return;
+    const currentRoundGames = tournament.games.filter(
+      (g) => g.round === tournament.currentRound
+    );
+    const allCurrentDone = currentRoundGames.every(
+      (g) => g.status === 'completed'
+    );
+    if (allCurrentDone && tournament.currentRound < totalRounds - 1) {
+      updateGame(id, (g) => ({
+        ...(g as AmericanoTournament),
+        currentRound: (g as AmericanoTournament).currentRound + 1,
+      }));
+    }
+  }, [tournament, id, totalRounds, updateGame]);
+
+  const handleScoreChange = useCallback(
+    (gameId: string, team: 'team1' | 'team2', delta: number) => {
+      if (!tournament) return;
+      updateGame(id, (g) => {
+        const t = g as AmericanoTournament;
+        const updatedGames = t.games.map((game) => {
+          if (game.id !== gameId) return game;
+          if (game.status === 'completed') return game;
+
+          const key = team === 'team1' ? 'team1Score' : 'team2Score';
+          const newScore = Math.max(
+            0,
+            Math.min(t.pointsToWin, game[key] + delta)
+          );
+
+          return {
+            ...game,
+            [key]: newScore,
+            status:
+              game.status === 'pending'
+                ? ('in_progress' as const)
+                : game.status,
+          };
+        });
+        return { ...t, games: updatedGames };
+      });
+    },
+    [tournament, id, updateGame]
+  );
+
+  const handleCompleteGame = useCallback(
+    (gameId: string) => {
+      if (!tournament) return;
+      updateGame(id, (g) => {
+        const t = g as AmericanoTournament;
+        const updatedGames = t.games.map((game) => {
+          if (game.id !== gameId) return game;
+          return { ...game, status: 'completed' as const };
+        });
+        return { ...t, games: updatedGames };
+      });
+    },
+    [tournament, id, updateGame]
+  );
+
+  const leaderboard = useMemo(() => {
+    if (!tournament) return [];
+    return getAmericanoLeaderboard(tournament.games, tournament.players);
+  }, [tournament]);
+
+  const playerName = useCallback(
+    (playerId: string) => getPlayer(playerId)?.name ?? 'Unbekannt',
+    [getPlayer]
+  );
+
+  if (!tournament) {
+    return (
+      <div className="min-h-screen text-white flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-white/40">Turnier nicht gefunden</p>
+          <button
+            onClick={() => router.push('/')}
+            className="btn-secondary px-5 py-2 text-sm text-rose-400"
+          >
+            ← Zur Startseite
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen text-white animate-fade-in">
+      <div className="max-w-lg mx-auto px-4 py-6">
+        {/* Header */}
+        <div className="mb-4 animate-fade-in-up stagger-1">
+          <button
+            onClick={() => router.push('/')}
+            className="glass-card-static px-3 py-1.5 rounded-2xl text-sm text-white/60 hover:bg-white/[0.06] mb-3 flex items-center gap-1.5 transition-all"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            Zurück
+          </button>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold gradient-text">Americano Groß</h1>
+              <p className="text-xs text-white/40">
+                Runde {tournament.currentRound + 1} von {totalRounds} •{' '}
+                {tournament.pointsToWin} Pkt.
+              </p>
+            </div>
+            {tournament.status === 'completed' && (
+              <span className="pill bg-rose-500/15 text-rose-400">
+                Abgeschlossen
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Final standings banner */}
+        {tournament.status === 'completed' && leaderboard.length > 0 && (
+          <div className="glass-card-static rounded-2xl p-5 mb-4 text-center animate-fade-in-scale" style={{ borderColor: 'rgba(168,85,247,0.2)' }}>
+            <div className="text-3xl mb-2">🏆</div>
+            <div className="font-bold text-xl gradient-text">
+              {playerName(leaderboard[0].playerId)}
+            </div>
+            <div className="text-xs text-white/40 mt-1">
+              {leaderboard[0].points} Punkte • {leaderboard[0].wins} Siege
+            </div>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="glass-card-static flex gap-1 rounded-2xl p-1 mb-5 animate-fade-in-up stagger-2">
+          {(['games', 'standings'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                activeTab === tab
+                  ? 'bg-rose-500/15 text-rose-400 shadow-[0_0_12px_rgba(168,85,247,0.1)]'
+                  : 'text-white/40 hover:text-white/70'
+              }`}
+            >
+              {tab === 'games' ? 'Spiele' : 'Tabelle'}
+            </button>
+          ))}
+        </div>
+
+        {/* Games Tab */}
+        {activeTab === 'games' && (
+          <div className="space-y-5 animate-fade-in-up">
+            {Array.from({ length: totalRounds }, (_, r) => {
+              const roundGames = tournament.games.filter(
+                (g) => g.round === r
+              );
+              const isCurrentRound = r === tournament.currentRound;
+              const roundComplete = roundGames.every(
+                (g) => g.status === 'completed'
+              );
+
+              return (
+                <div key={r}>
+                  {/* Round header */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <h2
+                      className={`text-xs font-bold uppercase tracking-wider ${
+                        isCurrentRound ? 'text-rose-400' : 'text-white/25'
+                      }`}
+                    >
+                      Runde {r + 1}
+                    </h2>
+                    {roundComplete && (
+                      <span className="pill bg-white/[0.04] text-white/40 text-[10px]">✓ Fertig</span>
+                    )}
+                    {isCurrentRound && !roundComplete && (
+                      <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.4)]" />
+                    )}
+                  </div>
+
+                  {/* Game cards */}
+                  <div className="space-y-3">
+                    {roundGames.map((game) => (
+                      <GameCard
+                        key={game.id}
+                        game={game}
+                        pointsToWin={tournament.pointsToWin}
+                        playerName={playerName}
+                        onScoreChange={handleScoreChange}
+                        onComplete={handleCompleteGame}
+                        isCurrentRound={isCurrentRound}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Standings Tab */}
+        {activeTab === 'standings' && (
+          <div className="animate-fade-in-up">
+            {allCompleted && (
+              <div className="text-center py-3 mb-4">
+                <h2 className="text-2xl font-bold gradient-text">🏆 Endstand</h2>
+              </div>
+            )}
+
+            <div className="glass-card-static rounded-2xl overflow-hidden">
+              {/* Table header */}
+              <div className="grid grid-cols-[2.5rem_1fr_3.5rem_2.5rem_2rem] gap-2 px-4 py-3 border-b border-white/[0.06] text-[11px] font-semibold uppercase tracking-wider text-white/25">
+                <span>#</span>
+                <span>Spieler</span>
+                <span className="text-right">Pkt.</span>
+                <span className="text-right">S</span>
+                <span className="text-right">Sp.</span>
+              </div>
+
+              {/* Rows */}
+              {leaderboard.map((entry, i) => {
+                const rank = i + 1;
+                const medal =
+                  rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
+                const highlight =
+                  rank === 1
+                    ? 'bg-amber-500/[0.08] border-l-2 border-amber-500'
+                    : rank === 2
+                    ? 'bg-white/[0.03] border-l-2 border-white/30'
+                    : rank === 3
+                    ? 'bg-orange-500/[0.05] border-l-2 border-orange-600'
+                    : 'border-l-2 border-transparent';
+
+                return (
+                  <div
+                    key={entry.playerId}
+                    className={`grid grid-cols-[2.5rem_1fr_3.5rem_2.5rem_2rem] gap-2 px-4 py-3 items-center border-t border-white/[0.04] ${highlight}`}
+                  >
+                    <span className="text-sm">
+                      {medal ?? <span className="text-white/25">{rank}</span>}
+                    </span>
+                    <span className="text-sm font-medium truncate text-white/90">
+                      {playerName(entry.playerId)}
+                    </span>
+                    <span className="text-sm font-bold text-rose-400 text-right">
+                      {entry.points}
+                    </span>
+                    <span className="text-sm text-white/40 text-right">
+                      {entry.wins}
+                    </span>
+                    <span className="text-sm text-white/25 text-right">
+                      {entry.gamesPlayed}
+                    </span>
+                  </div>
+                );
+              })}
+
+              {leaderboard.length === 0 && (
+                <div className="px-4 py-8 text-center text-white/25 text-sm">
+                  Noch keine Spiele abgeschlossen.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Game Card Component ─── */
+
+interface GameCardProps {
+  game: AmericanoGame;
+  pointsToWin: number;
+  playerName: (id: string) => string;
+  onScoreChange: (gameId: string, team: 'team1' | 'team2', delta: number) => void;
+  onComplete: (gameId: string) => void;
+  isCurrentRound: boolean;
+}
+
+function GameCard({
+  game,
+  pointsToWin,
+  playerName,
+  onScoreChange,
+  onComplete,
+  isCurrentRound,
+}: GameCardProps) {
+  const isCompleted = game.status === 'completed';
+  const canComplete =
+    !isCompleted &&
+    (game.team1Score === pointsToWin || game.team2Score === pointsToWin);
+
+  const team1Won = isCompleted && game.team1Score > game.team2Score;
+  const team2Won = isCompleted && game.team2Score > game.team1Score;
+
+  const renderScore = (team: 'team1' | 'team2') => {
+    const score = team === 'team1' ? game.team1Score : game.team2Score;
+    const won = team === 'team1' ? team1Won : team2Won;
+
+    if (isCompleted) {
+      return (
+        <span className={`text-2xl font-bold tabular-nums ${won ? 'text-rose-400' : 'text-white/30'}`}>
+          {score}
+        </span>
+      );
+    }
+
+    return (
+      <ScoreInput
+        score={score}
+        maxScore={pointsToWin}
+        onScoreChange={(val) => onScoreChange(game.id, team, val - score)}
+      />
+    );
+  };
+
+  return (
+    <CourtCard
+      team1Players={[
+        `${team1Won ? '👑 ' : ''}${playerName(game.team1[0])}`,
+        playerName(game.team1[1]),
+      ]}
+      team2Players={[
+        `${team2Won ? '👑 ' : ''}${playerName(game.team2[0])}`,
+        playerName(game.team2[1]),
+      ]}
+      courtNumber={game.court + 1}
+      accentColor="rose"
+      completed={isCompleted}
+      highlighted={isCurrentRound && !isCompleted}
+      team1Score={renderScore('team1')}
+      team2Score={renderScore('team2')}
+      statusBadge={isCompleted ? (
+        <span className="text-[10px] font-medium text-white/25">Abgeschlossen</span>
+      ) : undefined}
+      footer={canComplete ? (
+        <button
+          onClick={() => onComplete(game.id)}
+          className="btn-primary w-full py-2.5 text-sm font-semibold"
+        >
+          Spiel beenden
+        </button>
+      ) : undefined}
+    />
+  );
+}
