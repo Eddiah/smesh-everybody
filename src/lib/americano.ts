@@ -1,10 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { AmericanoGame } from '@/types';
 
-interface RoundGame {
-  team1: [number, number];
-  team2: [number, number];
-  court: number;
+// Track how many consecutive rounds each player has rested
+// Prioritize matchups that include players who've been sitting out longest
+function priorityScore(
+  players: string[],
+  restCounts: Map<string, number>
+): number {
+  return players.reduce((sum, p) => sum + (restCounts.get(p) || 0), 0);
 }
 
 // Generate Americano Klein schedule: every player partners with every other player once
@@ -15,28 +18,107 @@ export function generateAmericanoKleinSchedule(
   const n = playerIds.length;
   if (n < 4) return [];
 
+  // Generate all matchups: each partnership paired with a non-overlapping partnership
   const partnerships = generateAllPartnerships(n);
-  const games: AmericanoGame[] = [];
+  const allMatchups: { team1: [string, string]; team2: [string, string]; partnerKeys: [string, string] }[] = [];
+
+  for (let a = 0; a < partnerships.length; a++) {
+    for (let b = a + 1; b < partnerships.length; b++) {
+      const [i1, i2] = partnerships[a];
+      const [i3, i4] = partnerships[b];
+      if (i1 === i3 || i1 === i4 || i2 === i3 || i2 === i4) continue;
+      allMatchups.push({
+        team1: [playerIds[i1], playerIds[i2]],
+        team2: [playerIds[i3], playerIds[i4]],
+        partnerKeys: [`${i1}-${i2}`, `${i3}-${i4}`],
+      });
+    }
+  }
+
+  // We need exactly one game per partnership
   const usedPartnerships = new Set<string>();
+  const games: AmericanoGame[] = [];
+  const restCounts = new Map<string, number>(playerIds.map((p) => [p, 0]));
   let round = 0;
 
   while (usedPartnerships.size < partnerships.length) {
-    const roundGames = scheduleRound(
-      playerIds,
-      partnerships,
-      usedPartnerships,
-      courts,
-      round
+    // Filter to matchups where at least one partnership is unused
+    const candidates = allMatchups.filter(
+      (m) => !usedPartnerships.has(m.partnerKeys[0]) || !usedPartnerships.has(m.partnerKeys[1])
+    ).filter(
+      (m) => !usedPartnerships.has(m.partnerKeys[0]) && !usedPartnerships.has(m.partnerKeys[1])
     );
+
+    if (candidates.length === 0) {
+      // Try matchups where at least one partnership is unused
+      const partial = allMatchups.filter(
+        (m) => !usedPartnerships.has(m.partnerKeys[0]) || !usedPartnerships.has(m.partnerKeys[1])
+      );
+      if (partial.length === 0) break;
+      // Use the old greedy method for remaining
+      const leftover = scheduleRoundLegacy(playerIds, partnerships, usedPartnerships, courts, round);
+      if (leftover.length === 0) break;
+      games.push(...leftover);
+      // Update rest counts
+      const playedThisRound = new Set<string>();
+      for (const g of leftover) { [...g.team1, ...g.team2].forEach((p) => playedThisRound.add(p)); }
+      for (const p of playerIds) {
+        restCounts.set(p, playedThisRound.has(p) ? 0 : (restCounts.get(p) || 0) + 1);
+      }
+      round++;
+      continue;
+    }
+
+    // Sort candidates by rest priority (prefer matchups with rested players)
+    candidates.sort((a, b) => {
+      const pa = [...a.team1, ...a.team2];
+      const pb = [...b.team1, ...b.team2];
+      return priorityScore(pb, restCounts) - priorityScore(pa, restCounts);
+    });
+
+    // Greedily fill the round
+    const usedInRound = new Set<string>();
+    const roundGames: AmericanoGame[] = [];
+    let court = 0;
+
+    for (const m of candidates) {
+      if (court >= courts) break;
+      if (usedPartnerships.has(m.partnerKeys[0]) || usedPartnerships.has(m.partnerKeys[1])) continue;
+      const players = [...m.team1, ...m.team2];
+      if (players.some((p) => usedInRound.has(p))) continue;
+
+      const swap = Math.random() < 0.5;
+      roundGames.push({
+        id: uuidv4(),
+        round,
+        court,
+        team1: swap ? m.team2 : m.team1,
+        team2: swap ? m.team1 : m.team2,
+        team1Score: 0,
+        team2Score: 0,
+        status: 'pending',
+      });
+
+      players.forEach((p) => usedInRound.add(p));
+      usedPartnerships.add(m.partnerKeys[0]);
+      usedPartnerships.add(m.partnerKeys[1]);
+      court++;
+    }
+
     if (roundGames.length === 0) break;
     games.push(...roundGames);
+
+    // Update rest counts
+    for (const p of playerIds) {
+      restCounts.set(p, usedInRound.has(p) ? 0 : (restCounts.get(p) || 0) + 1);
+    }
     round++;
   }
 
   return games;
 }
 
-// Generate Americano Groß schedule: all partner + opponent combinations
+// Generate Americano Groß schedule: every possible 2v2 matchup
 export function generateAmericanoGrossSchedule(
   playerIds: string[],
   courts: number
@@ -44,97 +126,75 @@ export function generateAmericanoGrossSchedule(
   const n = playerIds.length;
   if (n < 4) return [];
 
-  // Phase 1: Cover all partnerships (same as Klein)
-  const kleinGames = generateAmericanoKleinSchedule(playerIds, courts);
+  // Generate ALL unique matchups
+  const allMatchups: { team1: [string, string]; team2: [string, string] }[] = [];
 
-  // Phase 2: Check which opponent pairs are missing
-  const allPairs = new Set<string>();
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      allPairs.add(pairKey(playerIds[i], playerIds[j]));
+  for (let a = 0; a < n; a++) {
+    for (let b = a + 1; b < n; b++) {
+      for (let c = b + 1; c < n; c++) {
+        for (let d = c + 1; d < n; d++) {
+          const p = [playerIds[a], playerIds[b], playerIds[c], playerIds[d]];
+          allMatchups.push({ team1: [p[0], p[1]], team2: [p[2], p[3]] });
+          allMatchups.push({ team1: [p[0], p[2]], team2: [p[1], p[3]] });
+          allMatchups.push({ team1: [p[0], p[3]], team2: [p[1], p[2]] });
+        }
+      }
     }
   }
 
-  const coveredOpponents = new Set<string>();
-  for (const game of kleinGames) {
-    const [a, b] = game.team1;
-    const [c, d] = game.team2;
-    coveredOpponents.add(pairKey(a, c));
-    coveredOpponents.add(pairKey(a, d));
-    coveredOpponents.add(pairKey(b, c));
-    coveredOpponents.add(pairKey(b, d));
-  }
+  // Schedule with balanced rest: always prefer matchups with players who rested most
+  const games: AmericanoGame[] = [];
+  const remaining = [...allMatchups];
+  const restCounts = new Map<string, number>(playerIds.map((p) => [p, 0]));
+  let round = 0;
 
-  const missingOpponents: string[] = [];
-  for (const pair of allPairs) {
-    if (!coveredOpponents.has(pair)) {
-      missingOpponents.push(pair);
-    }
-  }
+  while (remaining.length > 0) {
+    // Sort remaining by rest priority (highest rest first)
+    remaining.sort((a, b) => {
+      const pa = [...a.team1, ...a.team2];
+      const pb = [...b.team1, ...b.team2];
+      return priorityScore(pb, restCounts) - priorityScore(pa, restCounts);
+    });
 
-  // Phase 3: Generate extra games to cover missing opponent pairs
-  let currentRound = kleinGames.length > 0
-    ? Math.max(...kleinGames.map(g => g.round)) + 1
-    : 0;
-  const extraGames: AmericanoGame[] = [];
-  const remainingOpponents = new Set(missingOpponents);
-
-  while (remainingOpponents.size > 0) {
-    const roundGames: AmericanoGame[] = [];
     const usedInRound = new Set<string>();
-    let courtNum = 0;
+    const scheduled: number[] = [];
+    let court = 0;
 
-    for (const oppPair of [...remainingOpponents]) {
-      if (courtNum >= courts) break;
-      const [p1, p2] = oppPair.split('|');
+    for (let i = 0; i < remaining.length && court < courts; i++) {
+      const m = remaining[i];
+      const players = [...m.team1, ...m.team2];
+      if (players.some((p) => usedInRound.has(p))) continue;
 
-      if (usedInRound.has(p1) || usedInRound.has(p2)) continue;
-
-      // Find two more players not used in this round
-      const available = playerIds.filter(
-        pid => pid !== p1 && pid !== p2 && !usedInRound.has(pid)
-      );
-      if (available.length < 2) continue;
-
-      const p3 = available[0];
-      const p4 = available[1];
-
-      // Create game: (p1, p3) vs (p2, p4) so p1 faces p2, randomize sides
-      const swapSides = Math.random() < 0.5;
-      const game: AmericanoGame = {
+      const swap = Math.random() < 0.5;
+      games.push({
         id: uuidv4(),
-        round: currentRound,
-        court: courtNum,
-        team1: swapSides ? [p2, p4] : [p1, p3],
-        team2: swapSides ? [p1, p3] : [p2, p4],
+        round,
+        court,
+        team1: swap ? m.team2 : m.team1,
+        team2: swap ? m.team1 : m.team2,
         team1Score: 0,
         team2Score: 0,
         status: 'pending',
-      };
+      });
 
-      roundGames.push(game);
-      usedInRound.add(p1);
-      usedInRound.add(p2);
-      usedInRound.add(p3);
-      usedInRound.add(p4);
-      courtNum++;
-
-      // Mark covered opponents
-      const newOpps = [
-        pairKey(p1, p2), pairKey(p1, p4),
-        pairKey(p3, p2), pairKey(p3, p4),
-      ];
-      for (const op of newOpps) {
-        remainingOpponents.delete(op);
-      }
+      players.forEach((p) => usedInRound.add(p));
+      scheduled.push(i);
+      court++;
     }
 
-    if (roundGames.length === 0) break;
-    extraGames.push(...roundGames);
-    currentRound++;
+    if (scheduled.length === 0) break;
+    for (let i = scheduled.length - 1; i >= 0; i--) {
+      remaining.splice(scheduled[i], 1);
+    }
+
+    // Update rest counts
+    for (const p of playerIds) {
+      restCounts.set(p, usedInRound.has(p) ? 0 : (restCounts.get(p) || 0) + 1);
+    }
+    round++;
   }
 
-  return [...kleinGames, ...extraGames];
+  return games;
 }
 
 function generateAllPartnerships(n: number): [number, number][] {
@@ -151,7 +211,7 @@ function pairKey(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
-function scheduleRound(
+function scheduleRoundLegacy(
   playerIds: string[],
   allPartnerships: [number, number][],
   usedPartnerships: Set<string>,
@@ -217,7 +277,7 @@ function scheduleRound(
 export function getAmericanoLeaderboard(
   games: AmericanoGame[],
   playerIds: string[]
-): { playerId: string; points: number; wins: number; gamesPlayed: number }[] {
+): { playerId: string; points: number; avgPoints: number; wins: number; gamesPlayed: number }[] {
   const stats: Record<string, { points: number; wins: number; gamesPlayed: number }> = {};
 
   for (const pid of playerIds) {
@@ -243,7 +303,25 @@ export function getAmericanoLeaderboard(
     }
   }
 
+  // Check if all players have equal games played
+  const gameCounts = playerIds.map((pid) => stats[pid].gamesPlayed);
+  const allEqual = gameCounts.every((c) => c === gameCounts[0]);
+
   return playerIds
-    .map(pid => ({ playerId: pid, ...stats[pid] }))
-    .sort((a, b) => b.points - a.points || b.wins - a.wins);
+    .map((pid) => ({
+      playerId: pid,
+      ...stats[pid],
+      avgPoints: stats[pid].gamesPlayed > 0
+        ? Math.round((stats[pid].points / stats[pid].gamesPlayed) * 100) / 100
+        : 0,
+    }))
+    .sort((a, b) => {
+      // If unequal games, sort by average points; otherwise by total points
+      if (!allEqual) {
+        if (b.avgPoints !== a.avgPoints) return b.avgPoints - a.avgPoints;
+      } else {
+        if (b.points !== a.points) return b.points - a.points;
+      }
+      return b.wins - a.wins;
+    });
 }

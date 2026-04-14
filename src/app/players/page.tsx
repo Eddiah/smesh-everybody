@@ -43,7 +43,10 @@ export default function PlayersPage() {
     if (!hydrated) return new Set<string>();
     const inGames = new Set<string>();
     for (const game of games) {
-      if (game.type === '2vs2') {
+      if (game.type === '1vs1') {
+        inGames.add(game.player1);
+        inGames.add(game.player2);
+      } else if (game.type === '2vs2') {
         game.team1.forEach((id) => inGames.add(id));
         game.team2.forEach((id) => inGames.add(id));
       } else {

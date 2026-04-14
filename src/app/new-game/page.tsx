@@ -15,6 +15,20 @@ interface GameMode {
 
 const gameModes: GameMode[] = [
   {
+    title: '1vs1',
+    description: 'Einzelmatch',
+    href: '/game/1vs1/setup',
+    accentColor: 'text-emerald-400',
+    glowColor: 'shadow-[0_0_20px_rgba(52,211,153,0.15)]',
+    iconBg: 'bg-emerald-500/10',
+    borderAccent: 'border-t-emerald-500/40',
+    icon: (
+      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+      </svg>
+    ),
+  },
+  {
     title: '2vs2',
     description: 'Klassisches 2 vs 2 Match',
     href: '/game/2vs2/setup',

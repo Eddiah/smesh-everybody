@@ -7,6 +7,8 @@ import type { GameRecord, Match2vs2, Tournament, AmericanoTournament } from '@/t
 
 function getGameLink(game: GameRecord): string {
   switch (game.type) {
+    case '1vs1':
+      return `/game/1vs1/${game.id}`;
     case '2vs2':
       return `/game/2vs2/${game.id}`;
     case '2vs2-tournament':
@@ -20,6 +22,7 @@ function getGameLink(game: GameRecord): string {
 
 function getGameTypeBadge(type: GameRecord['type']) {
   const config: Record<GameRecord['type'], { label: string; color: string }> = {
+    '1vs1': { label: '1vs1', color: 'bg-emerald-500/15 text-emerald-400' },
     '2vs2': { label: '2vs2', color: 'bg-indigo-500/15 text-indigo-400' },
     '2vs2-tournament': { label: 'Turnier', color: 'bg-blue-500/15 text-blue-400' },
     'americano-klein': { label: 'Americano Klein', color: 'bg-amber-500/15 text-amber-400' },
@@ -47,7 +50,9 @@ function formatDate(dateString: string): string {
 function getPlayerNames(game: GameRecord, getPlayer: (id: string) => { name: string } | undefined): string {
   let playerIds: string[] = [];
 
-  if (game.type === '2vs2') {
+  if (game.type === '1vs1') {
+    playerIds = [game.player1, game.player2];
+  } else if (game.type === '2vs2') {
     playerIds = [...game.team1, ...game.team2];
   } else {
     playerIds = game.players;

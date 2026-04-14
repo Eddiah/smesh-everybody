@@ -66,6 +66,13 @@ export default function AmericanoKleinTournamentPage() {
     return getAmericanoLeaderboard(tournament.games, tournament.players);
   }, [tournament]);
 
+  // Check if players have unequal game counts (use avg points then)
+  const usingAvg = useMemo(() => {
+    if (leaderboard.length === 0) return false;
+    const counts = leaderboard.map((e) => e.gamesPlayed);
+    return !counts.every((c) => c === counts[0]);
+  }, [leaderboard]);
+
   const isTournamentComplete = useMemo(() => {
     return tournament?.games.every((g) => g.status === 'completed') ?? false;
   }, [tournament]);
@@ -274,9 +281,10 @@ export default function AmericanoKleinTournamentPage() {
 
             <div className="glass-card-static rounded-2xl overflow-hidden">
               {/* Table header */}
-              <div className="grid grid-cols-[2.5rem_1fr_3.5rem_2.5rem_2rem] gap-2 px-4 py-3 border-b border-white/[0.06] text-[11px] font-semibold uppercase tracking-wider text-white/25">
+              <div className={`grid ${usingAvg ? 'grid-cols-[2rem_1fr_2.5rem_2.5rem_2rem_2rem]' : 'grid-cols-[2.5rem_1fr_3.5rem_2.5rem_2rem]'} gap-2 px-4 py-3 border-b border-white/[0.06] text-[11px] font-semibold uppercase tracking-wider text-white/25`}>
                 <span>#</span>
                 <span>Spieler</span>
+                {usingAvg && <span className="text-right">⌀</span>}
                 <span className="text-right">Pkt.</span>
                 <span className="text-right">S</span>
                 <span className="text-right">Sp.</span>
@@ -299,7 +307,7 @@ export default function AmericanoKleinTournamentPage() {
                 return (
                   <div
                     key={entry.playerId}
-                    className={`grid grid-cols-[2.5rem_1fr_3.5rem_2.5rem_2rem] gap-2 px-4 py-3 items-center border-t border-white/[0.04] ${highlight}`}
+                    className={`grid ${usingAvg ? 'grid-cols-[2rem_1fr_2.5rem_2.5rem_2rem_2rem]' : 'grid-cols-[2.5rem_1fr_3.5rem_2.5rem_2rem]'} gap-2 px-4 py-3 items-center border-t border-white/[0.04] ${highlight}`}
                   >
                     <span className="text-sm">
                       {medal ?? <span className="text-white/25">{rank}</span>}
@@ -307,7 +315,12 @@ export default function AmericanoKleinTournamentPage() {
                     <span className="text-sm font-medium truncate text-white/90">
                       {playerName(entry.playerId)}
                     </span>
-                    <span className="text-sm font-bold text-amber-400 text-right">
+                    {usingAvg && (
+                      <span className="text-sm font-bold text-amber-400 text-right">
+                        {entry.avgPoints.toFixed(1)}
+                      </span>
+                    )}
+                    <span className={`text-sm ${usingAvg ? 'text-white/50' : 'font-bold text-amber-400'} text-right`}>
                       {entry.points}
                     </span>
                     <span className="text-sm text-white/40 text-right">{entry.wins}</span>
@@ -324,6 +337,12 @@ export default function AmericanoKleinTournamentPage() {
                 </div>
               )}
             </div>
+
+            {usingAvg && (
+              <p className="text-[11px] text-white/30 text-center mt-3 px-4">
+                ⌀ = Durchschnittspunkte pro Spiel (Rangfolge basiert auf ⌀, da Spielanzahl ungleich)
+              </p>
+            )}
           </div>
         )}
       </div>

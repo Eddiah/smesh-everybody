@@ -7,10 +7,11 @@ import { useGameStore } from '@/store/gameStore';
 import type { GameRecord, Match2vs2, Tournament, AmericanoTournament } from '@/types';
 import { formatSetScore, getSetsScore } from '@/lib/scoring';
 
-type FilterType = 'all' | '2vs2' | '2vs2-tournament' | 'americano-klein' | 'americano-gross';
+type FilterType = 'all' | '1vs1' | '2vs2' | '2vs2-tournament' | 'americano-klein' | 'americano-gross';
 
 const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'all', label: 'Alle' },
+  { key: '1vs1', label: '1vs1' },
   { key: '2vs2', label: '2vs2' },
   { key: '2vs2-tournament', label: 'Turnier' },
   { key: 'americano-klein', label: 'Americano Klein' },
@@ -18,6 +19,7 @@ const FILTERS: { key: FilterType; label: string }[] = [
 ];
 
 const TYPE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  '1vs1': { bg: 'bg-emerald-500/10', text: 'text-emerald-400', label: '1vs1' },
   '2vs2': { bg: 'bg-indigo-500/10', text: 'text-indigo-400', label: '2vs2' },
   '2vs2-tournament': { bg: 'bg-blue-500/10', text: 'text-blue-400', label: 'Turnier' },
   'americano-klein': { bg: 'bg-amber-500/10', text: 'text-amber-400', label: 'Americano Klein' },
@@ -26,6 +28,8 @@ const TYPE_STYLES: Record<string, { bg: string; text: string; label: string }> =
 
 function getGameLink(game: GameRecord): string {
   switch (game.type) {
+    case '1vs1':
+      return `/game/1vs1/${game.id}`;
     case '2vs2':
       return `/game/2vs2/${game.id}`;
     case '2vs2-tournament':

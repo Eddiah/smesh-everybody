@@ -3,13 +3,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useGameStore } from '@/store/gameStore';
 
-type TabKey = 'gamesPlayed' | 'americanoPoints' | 'americanoWins' | 'americanoTournamentWins' | 'twovstwoWins' | 'tournamentWins';
+type TabKey = 'gamesPlayed' | 'americanoPoints' | 'americanoWins' | 'americanoTournamentWins' | 'twovstwoWins' | 'onevoneWins' | 'tournamentWins';
 
 const TABS: { key: TabKey; label: string }[] = [
+  { key: 'americanoWins', label: 'Americano Siege' },
   { key: 'gamesPlayed', label: 'Gespielte Spiele' },
   { key: 'americanoPoints', label: 'Americano Punkte' },
-  { key: 'americanoWins', label: 'Americano Siege' },
   { key: 'americanoTournamentWins', label: 'Americano Turnier Siege' },
+  { key: 'onevoneWins', label: '1vs1 Siege' },
   { key: 'twovstwoWins', label: '2vs2 Siege' },
   { key: 'tournamentWins', label: 'Turnier Siege' },
 ];
@@ -42,7 +43,7 @@ function hashColor(name: string): string {
 
 export default function RankingsPage() {
   const [hydrated, setHydrated] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('gamesPlayed');
+  const [activeTab, setActiveTab] = useState<TabKey>('americanoWins');
   const players = useGameStore((s) => s.players);
   const getPlayerWins = useGameStore((s) => s.getPlayerWins);
 

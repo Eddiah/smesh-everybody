@@ -10,6 +10,18 @@ export interface SetScore {
   tiebreak?: { team1Points: number; team2Points: number };
 }
 
+export interface Match1vs1 {
+  id: string;
+  type: '1vs1';
+  date: string;
+  player1: string;
+  player2: string;
+  setsToWin: number;
+  sets: SetScore[];
+  winner: 1 | 2 | null;
+  status: 'in_progress' | 'completed';
+}
+
 export interface Match2vs2 {
   id: string;
   type: '2vs2';
@@ -77,7 +89,7 @@ export interface AmericanoTournament {
   status: 'in_progress' | 'completed';
 }
 
-export type GameRecord = Match2vs2 | Tournament | AmericanoTournament;
+export type GameRecord = Match1vs1 | Match2vs2 | Tournament | AmericanoTournament;
 
 export interface PlayerRanking {
   playerId: string;

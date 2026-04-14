@@ -3,6 +3,7 @@ import { db } from '@/lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import type {
   Player,
+  Match1vs1,
   Match2vs2,
   Tournament,
   AmericanoTournament,
@@ -40,6 +41,7 @@ interface GameStore {
     americanoWins: number;
     americanoTournamentWins: number;
     twovstwoWins: number;
+    onevoneWins: number;
     tournamentWins: number;
   };
 }
@@ -112,9 +114,22 @@ export const useGameStore = create<GameStore>()((set, get) => ({
         let americanoWins = 0;
         let americanoTournamentWins = 0;
         let twovstwoWins = 0;
+        let onevoneWins = 0;
         let tournamentWins = 0;
 
         for (const game of games) {
+          if (game.type === '1vs1') {
+            const m = game as Match1vs1;
+            const isP1 = m.player1 === playerId;
+            const isP2 = m.player2 === playerId;
+            if (!isP1 && !isP2) continue;
+            if (m.status === 'completed') {
+              gamesPlayed++;
+              if (m.winner === 1 && isP1) onevoneWins++;
+              if (m.winner === 2 && isP2) onevoneWins++;
+            }
+          }
+
           if (game.type === '2vs2') {
             const m = game as Match2vs2;
             const isInGame =
@@ -176,21 +191,35 @@ export const useGameStore = create<GameStore>()((set, get) => ({
               }
             }
 
-            // Check if player won the americano tournament (most points)
+            // Check if player won the americano tournament
+            // Use average points per game when players have unequal game counts
             if (a.status === 'completed') {
               const playerScores = new Map<string, number>();
+              const playerGameCounts = new Map<string, number>();
               for (const ag of a.games) {
                 if (ag.status !== 'completed') continue;
                 for (const pid of ag.team1) {
                   playerScores.set(pid, (playerScores.get(pid) || 0) + ag.team1Score);
+                  playerGameCounts.set(pid, (playerGameCounts.get(pid) || 0) + 1);
                 }
                 for (const pid of ag.team2) {
                   playerScores.set(pid, (playerScores.get(pid) || 0) + ag.team2Score);
+                  playerGameCounts.set(pid, (playerGameCounts.get(pid) || 0) + 1);
                 }
               }
-              const maxScore = Math.max(...playerScores.values());
-              const myScore = playerScores.get(playerId) || 0;
-              if (myScore === maxScore && myScore > 0) {
+              // Check if all players have equal game counts
+              const counts = [...playerGameCounts.values()];
+              const allEqual = counts.every((c) => c === counts[0]);
+
+              let myMetric = 0;
+              let maxMetric = -1;
+              for (const [pid, score] of playerScores) {
+                const gc = playerGameCounts.get(pid) || 1;
+                const metric = allEqual ? score : score / gc;
+                if (pid === playerId) myMetric = metric;
+                if (metric > maxMetric) maxMetric = metric;
+              }
+              if (myMetric === maxMetric && myMetric > 0) {
                 americanoTournamentWins++;
               }
             }
@@ -203,6 +232,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
           americanoWins,
           americanoTournamentWins,
           twovstwoWins,
+          onevoneWins,
           tournamentWins,
         };
       },

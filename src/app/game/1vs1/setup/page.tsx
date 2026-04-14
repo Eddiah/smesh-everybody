@@ -1,0 +1,139 @@
+'use client';
+
+import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { v4 as uuidv4 } from 'uuid';
+import { useGameStore } from '@/store/gameStore';
+import PlayerSelector from '@/components/PlayerSelector';
+import CourtCard from '@/components/CourtCard';
+import type { Match1vs1 } from '@/types';
+
+export default function Setup1vs1Page() {
+  const router = useRouter();
+  const { addGame, getPlayer } = useGameStore();
+
+  const [step, setStep] = useState(1);
+  const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
+  const [setsToWin, setSetsToWin] = useState(1);
+
+  const playerName = useCallback(
+    (id: string) => getPlayer(id)?.name ?? 'Unbekannt',
+    [getPlayer]
+  );
+
+  const handleStart = () => {
+    const id = uuidv4();
+    const match: Match1vs1 = {
+      id,
+      type: '1vs1',
+      date: new Date().toISOString(),
+      player1: selectedPlayers[0],
+      player2: selectedPlayers[1],
+      setsToWin,
+      sets: [{ team1Games: 0, team2Games: 0 }],
+      winner: null,
+      status: 'in_progress',
+    };
+    addGame(match);
+    router.push(`/game/1vs1/${id}`);
+  };
+
+  return (
+    <div className="px-4 pt-8 pb-10 space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center gap-4 animate-fade-in-up">
+        <Link
+          href="/new-game"
+          className="flex items-center justify-center w-11 h-11 rounded-full glass-card-static transition-all hover:border-white/20 active:scale-95"
+        >
+          <svg className="w-5 h-5 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight gradient-text">1vs1 Einrichtung</h1>
+          <p className="text-sm text-white/40 mt-0.5">Schritt {step} von 2</p>
+        </div>
+      </div>
+
+      {/* Step 1: Select Players */}
+      {step === 1 && (
+        <div className="space-y-6 animate-fade-in-up stagger-1">
+          <PlayerSelector
+            selectedPlayers={selectedPlayers}
+            onPlayersChange={setSelectedPlayers}
+            minPlayers={2}
+            maxPlayers={2}
+            exactCount={2}
+          />
+          <button
+            onClick={() => setStep(2)}
+            disabled={selectedPlayers.length !== 2}
+            className="btn-primary w-full py-4 text-base font-semibold disabled:opacity-30"
+          >
+            Weiter
+          </button>
+        </div>
+      )}
+
+      {/* Step 2: Settings + Preview */}
+      {step === 2 && (
+        <div className="space-y-6 animate-fade-in-up stagger-1">
+          {/* Sets to win */}
+          <div className="glass-card-static rounded-2xl p-5">
+            <label className="text-xs text-white/40 font-semibold uppercase tracking-wider block mb-3">
+              Sätze zum Gewinnen
+            </label>
+            <div className="flex gap-2">
+              {[1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setSetsToWin(n)}
+                  className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${
+                    setsToWin === n
+                      ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-lg shadow-violet-500/20'
+                      : 'glass-card-static text-white/60 hover:text-white/80'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Match Preview */}
+          <div className="glass-card-static rounded-2xl p-6 space-y-5">
+            <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider text-center">
+              Match Übersicht
+            </h3>
+            <CourtCard
+              team1Players={[playerName(selectedPlayers[0])]}
+              team2Players={[playerName(selectedPlayers[1])]}
+              accentColor="blue"
+            />
+            <p className="text-center text-xs text-white/30">
+              Best of {setsToWin * 2 - 1} · {setsToWin} {setsToWin === 1 ? 'Satz' : 'Sätze'} zum Gewinnen
+            </p>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => setStep(1)}
+              className="btn-secondary flex-1 py-4 text-sm font-semibold"
+            >
+              Zurück
+            </button>
+            <button
+              onClick={handleStart}
+              className="btn-primary flex-1 py-4 text-base font-semibold"
+            >
+              Spiel starten
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
