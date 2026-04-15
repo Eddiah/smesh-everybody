@@ -153,9 +153,9 @@ export default function RankingsPage() {
                 </div>
 
                 {/* Value */}
-                <div className="text-right shrink-0">
+                <div className="text-right shrink-0 min-w-[2.5rem]">
                   <span
-                    className="text-2xl font-bold"
+                    className="text-2xl font-bold tabular-nums"
                     style={medalColor ? { color: medalColor } : { color: 'rgba(255,255,255,0.40)' }}
                   >
                     {entry.stats[activeTab]}

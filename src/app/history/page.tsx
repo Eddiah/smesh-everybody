@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { useGameStore } from '@/store/gameStore';
-import type { GameRecord, Match2vs2, Tournament, AmericanoTournament } from '@/types';
+import type { GameRecord, Match2vs2, Match1vs1, Tournament, AmericanoTournament } from '@/types';
 import { formatSetScore, getSetsScore } from '@/lib/scoring';
+import { getAmericanoLeaderboard } from '@/lib/americano';
 
 type FilterType = 'all' | '1vs1' | '2vs2' | '2vs2-tournament' | 'americano-klein' | 'americano-gross';
 
@@ -39,6 +40,36 @@ function getGameLink(game: GameRecord): string {
     case 'americano-gross':
       return `/game/americano-gross/${game.id}`;
   }
+}
+
+function Match1vs1Card({ game }: { game: Match1vs1 }) {
+  const getPlayer = useGameStore((s) => s.getPlayer);
+  const p1 = getPlayer(game.player1)?.name ?? '?';
+  const p2 = getPlayer(game.player2)?.name ?? '?';
+  const [team1Sets, team2Sets] = getSetsScore(game.sets);
+
+  return (
+    <div className="mt-4 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className={`flex-1 text-sm ${game.winner === 1 ? 'text-violet-400 font-semibold' : 'text-white/60'}`}>
+          {game.winner === 1 ? '🏆 ' : ''}{p1}
+        </div>
+        <span className="text-sm font-mono font-bold text-white/90 mx-3">
+          {team1Sets} - {team2Sets}
+        </span>
+        <div className={`flex-1 text-sm text-right ${game.winner === 2 ? 'text-violet-400 font-semibold' : 'text-white/60'}`}>
+          {game.winner === 2 ? '🏆 ' : ''}{p2}
+        </div>
+      </div>
+      {game.sets.length > 0 && (
+        <div className="flex justify-center gap-2 text-xs text-white/30">
+          {game.sets.map((set, i) => (
+            <span key={i}>{formatSetScore(set)}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Match2vs2Card({ game }: { game: Match2vs2 }) {
@@ -97,7 +128,16 @@ function TournamentCard({ game }: { game: Tournament }) {
 }
 
 function AmericanoCard({ game }: { game: AmericanoTournament }) {
+  const getPlayer = useGameStore((s) => s.getPlayer);
   const completedGames = game.games.filter((g) => g.status === 'completed').length;
+
+  // Determine winner from leaderboard
+  const winnerName = (() => {
+    if (game.status !== 'completed') return null;
+    const lb = getAmericanoLeaderboard(game.games, game.players);
+    if (lb.length === 0) return null;
+    return getPlayer(lb[0].playerId)?.name ?? null;
+  })();
 
   return (
     <div className="mt-4 space-y-1.5">
@@ -105,11 +145,15 @@ function AmericanoCard({ game }: { game: AmericanoTournament }) {
         <span>{game.players.length} Spieler</span>
         <span>{completedGames} / {game.games.length} Spiele</span>
       </div>
-      {game.status === 'completed' && (
+      {winnerName ? (
+        <div className="text-sm text-violet-400 font-semibold">
+          🏆 {winnerName}
+        </div>
+      ) : game.status === 'completed' ? (
         <div className="text-sm text-violet-400 font-semibold">
           ✅ Abgeschlossen
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -201,6 +245,7 @@ export default function HistoryPage() {
                   </p>
 
                   {/* Game-type specific content */}
+                  {game.type === '1vs1' && <Match1vs1Card game={game} />}
                   {game.type === '2vs2' && <Match2vs2Card game={game} />}
                   {game.type === '2vs2-tournament' && <TournamentCard game={game} />}
                   {(game.type === 'americano-klein' || game.type === 'americano-gross') && (

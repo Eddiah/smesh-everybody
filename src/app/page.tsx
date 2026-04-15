@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useGameStore } from '@/store/gameStore';
 import type { GameRecord, Match2vs2, Tournament, AmericanoTournament } from '@/types';
+import { getAmericanoLeaderboard } from '@/lib/americano';
 
 function getGameLink(game: GameRecord): string {
   switch (game.type) {
@@ -61,6 +62,48 @@ function getPlayerNames(game: GameRecord, getPlayer: (id: string) => { name: str
   return playerIds
     .map((id) => getPlayer(id)?.name ?? 'Unbekannt')
     .join(', ');
+}
+
+function getGameWinner(game: GameRecord, getPlayer: (id: string) => { name: string } | undefined): string | null {
+  if (game.status !== 'completed') return null;
+
+  if (game.type === '1vs1') {
+    if (game.winner === 1) return getPlayer(game.player1)?.name ?? null;
+    if (game.winner === 2) return getPlayer(game.player2)?.name ?? null;
+    return null;
+  }
+
+  if (game.type === '2vs2') {
+    if (game.winner === 1) {
+      const names = game.team1.map((id) => getPlayer(id)?.name ?? '?');
+      return names.join(' & ');
+    }
+    if (game.winner === 2) {
+      const names = game.team2.map((id) => getPlayer(id)?.name ?? '?');
+      return names.join(' & ');
+    }
+    return null;
+  }
+
+  if (game.type === '2vs2-tournament') {
+    const t = game as Tournament;
+    const winnerTeam = t.winner ? t.teams.find((team) => team.id === t.winner) : null;
+    if (winnerTeam) {
+      return winnerTeam.players.map((id) => getPlayer(id)?.name ?? '?').join(' & ');
+    }
+    return null;
+  }
+
+  if (game.type === 'americano-klein' || game.type === 'americano-gross') {
+    const a = game as AmericanoTournament;
+    const lb = getAmericanoLeaderboard(a.games, a.players);
+    if (lb.length > 0) {
+      return getPlayer(lb[0].playerId)?.name ?? null;
+    }
+    return null;
+  }
+
+  return null;
 }
 
 export default function Home() {
@@ -196,12 +239,14 @@ export default function Home() {
                 <p className="text-sm text-[rgba(255,255,255,0.6)] truncate">
                   {getPlayerNames(game, getPlayer)}
                 </p>
-                <div className="flex items-center gap-1.5 mt-3 text-[rgba(255,255,255,0.25)] text-xs">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                  </svg>
-                  <span>Abgeschlossen</span>
-                </div>
+                {(() => {
+                  const winner = getGameWinner(game, getPlayer);
+                  return winner ? (
+                    <p className="text-sm text-violet-400 font-semibold mt-2">
+                      🏆 {winner}
+                    </p>
+                  ) : null;
+                })()}
               </Link>
             ))}
           </div>
