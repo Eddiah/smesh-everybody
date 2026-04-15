@@ -3,47 +3,110 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useGameStore } from '@/store/gameStore';
 
-type TabKey = 'gamesPlayed' | 'americanoPoints' | 'americanoWins' | 'americanoTournamentWins' | 'twovstwoWins' | 'onevoneWins' | 'tournamentWins';
+type CategoryKey = 'overall' | 'americano' | 'normal';
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'americanoWins', label: 'Americano Siege' },
-  { key: 'gamesPlayed', label: 'Gespielte Spiele' },
-  { key: 'americanoPoints', label: 'Americano Punkte' },
-  { key: 'americanoTournamentWins', label: 'Americano Turnier Siege' },
-  { key: 'onevoneWins', label: '1vs1 Siege' },
-  { key: 'twovstwoWins', label: '2vs2 Siege' },
-  { key: 'tournamentWins', label: 'Turnier Siege' },
+interface OverallRow {
+  playerId: string;
+  name: string;
+  tournamentsPlayed: number;
+  gamesPlayed: number;
+  tournamentsWon: number;
+  gamesWon: number;
+  tournamentWinPct: number;
+  gameWinPct: number;
+}
+
+interface AmericanoRow {
+  playerId: string;
+  name: string;
+  tournamentsPlayed: number;
+  gamesPlayed: number;
+  tournamentWins: number;
+  wins: number;
+  points: number;
+  avgPoints: number;
+}
+
+interface NormalRow {
+  playerId: string;
+  name: string;
+  tournamentsPlayed: number;
+  onevonePlayed: number;
+  twovstwoPlayed: number;
+  tournamentWins: number;
+  onevoneWins: number;
+  twovstwoWins: number;
+}
+
+type SortKey<T> = keyof Omit<T, 'playerId' | 'name'>;
+
+const CATEGORY_TABS: { key: CategoryKey; label: string }[] = [
+  { key: 'overall', label: 'Gesamt' },
+  { key: 'americano', label: 'Americano' },
+  { key: 'normal', label: 'Normal' },
+];
+
+const OVERALL_COLS: { key: SortKey<OverallRow>; label: string; short: string }[] = [
+  { key: 'gameWinPct', label: 'Spiel Sieg-%', short: 'S%' },
+  { key: 'tournamentWinPct', label: 'Turnier Sieg-%', short: 'T%' },
+  { key: 'gamesWon', label: 'Spiele gew.', short: 'SG' },
+  { key: 'tournamentsWon', label: 'Turniere gew.', short: 'TG' },
+  { key: 'gamesPlayed', label: 'Spiele gesp.', short: 'Sp' },
+  { key: 'tournamentsPlayed', label: 'Turniere gesp.', short: 'T' },
+];
+
+const AMERICANO_COLS: { key: SortKey<AmericanoRow>; label: string; short: string }[] = [
+  { key: 'points', label: 'Punkte', short: 'Pkt' },
+  { key: 'avgPoints', label: '⌀ Pkt (10er)', short: '⌀' },
+  { key: 'tournamentWins', label: 'Turnier Siege', short: 'TS' },
+  { key: 'wins', label: 'Siege', short: 'S' },
+  { key: 'gamesPlayed', label: 'Spiele', short: 'Sp' },
+  { key: 'tournamentsPlayed', label: 'Turniere', short: 'T' },
+];
+
+const NORMAL_COLS: { key: SortKey<NormalRow>; label: string; short: string }[] = [
+  { key: 'twovstwoWins', label: '2vs2 Siege', short: '2S' },
+  { key: 'onevoneWins', label: '1vs1 Siege', short: '1S' },
+  { key: 'tournamentWins', label: 'Turnier Siege', short: 'TS' },
+  { key: 'twovstwoPlayed', label: '2vs2 Spiele', short: '2P' },
+  { key: 'onevonePlayed', label: '1vs1 Spiele', short: '1P' },
+  { key: 'tournamentsPlayed', label: 'Turniere', short: 'T' },
 ];
 
 const MEDAL_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'] as const;
 
-const MEDAL_BORDER_STYLES: Record<number, string> = {
-  1: 'border-[rgba(255,215,0,0.25)] shadow-[0_0_20px_rgba(255,215,0,0.08)]',
-  2: 'border-[rgba(192,192,192,0.2)]',
-  3: 'border-[rgba(205,127,50,0.2)]',
-};
-
 function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
 function hashColor(name: string): string {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = Math.abs(hash) % 360;
-  return `hsl(${hue}, 60%, 45%)`;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return `hsl(${Math.abs(hash) % 360}, 60%, 45%)`;
+}
+
+function formatPct(pct: number): string {
+  if (pct === 0) return '0%';
+  return `${Math.round(pct)}%`;
+}
+
+function formatAvg(avg: number): string {
+  if (avg === 0) return '0';
+  return avg.toFixed(1);
+}
+
+/* ─── Sort helper ─── */
+function sortRows<T>(rows: T[], key: keyof T): T[] {
+  return [...rows].sort((a, b) => (b[key] as number) - (a[key] as number));
 }
 
 export default function RankingsPage() {
   const [hydrated, setHydrated] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>('americanoWins');
+  const [category, setCategory] = useState<CategoryKey>('overall');
+  const [overallSort, setOverallSort] = useState<SortKey<OverallRow>>('gameWinPct');
+  const [americanoSort, setAmericanoSort] = useState<SortKey<AmericanoRow>>('points');
+  const [normalSort, setNormalSort] = useState<SortKey<NormalRow>>('twovstwoWins');
+
   const players = useGameStore((s) => s.players);
   const getPlayerWins = useGameStore((s) => s.getPlayerWins);
 
@@ -51,28 +114,66 @@ export default function RankingsPage() {
     setHydrated(true);
   }, []);
 
-  const rankings = useMemo(() => {
+  /* ─── Build stats once ─── */
+  const allStats = useMemo(() => {
     if (!hydrated) return [];
+    return players.map((p) => ({ player: p, stats: getPlayerWins(p.id) }));
+  }, [hydrated, players, getPlayerWins]);
 
-    const entries = players.map((p) => {
-      const stats = getPlayerWins(p.id);
-      return { player: p, stats };
+  /* ─── Overall ─── */
+  const overallRows = useMemo<OverallRow[]>(() => {
+    return allStats.map(({ player, stats }) => {
+      const tournamentsPlayed = stats.tournamentsPlayed + stats.americanoTournamentsPlayed;
+      const gamesPlayed = stats.gamesPlayed;
+      const tournamentsWon = stats.tournamentWins + stats.americanoTournamentWins;
+      const gamesWon = stats.onevoneWins + stats.twovstwoWins + stats.americanoWins;
+      return {
+        playerId: player.id,
+        name: player.name,
+        tournamentsPlayed,
+        gamesPlayed,
+        tournamentsWon,
+        gamesWon,
+        tournamentWinPct: tournamentsPlayed > 0 ? (tournamentsWon / tournamentsPlayed) * 100 : 0,
+        gameWinPct: gamesPlayed > 0 ? (gamesWon / gamesPlayed) * 100 : 0,
+      };
     });
+  }, [allStats]);
 
-    entries.sort((a, b) => b.stats[activeTab] - a.stats[activeTab]);
+  /* ─── Americano ─── */
+  const americanoRows = useMemo<AmericanoRow[]>(() => {
+    return allStats.map(({ player, stats }) => ({
+      playerId: player.id,
+      name: player.name,
+      tournamentsPlayed: stats.americanoTournamentsPlayed,
+      gamesPlayed: stats.americanoGamesPlayed,
+      tournamentWins: stats.americanoTournamentWins,
+      wins: stats.americanoWins,
+      points: stats.americanoPoints,
+      avgPoints:
+        stats.americanoGamesPlayed > 0
+          ? Math.round((stats.americanoNormalizedPoints / stats.americanoGamesPlayed) * 100) / 100
+          : 0,
+    }));
+  }, [allStats]);
 
-    // Assign ranks with tie-breaking
-    const ranked: { player: typeof entries[0]['player']; stats: typeof entries[0]['stats']; rank: number }[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      const rank =
-        i === 0 || entries[i].stats[activeTab] !== entries[i - 1].stats[activeTab]
-          ? i + 1
-          : ranked[i - 1].rank;
-      ranked.push({ ...entries[i], rank });
-    }
+  /* ─── Normal ─── */
+  const normalRows = useMemo<NormalRow[]>(() => {
+    return allStats.map(({ player, stats }) => ({
+      playerId: player.id,
+      name: player.name,
+      tournamentsPlayed: stats.tournamentsPlayed,
+      onevonePlayed: stats.onevonePlayed,
+      twovstwoPlayed: stats.twovstwoPlayed,
+      tournamentWins: stats.tournamentWins,
+      onevoneWins: stats.onevoneWins,
+      twovstwoWins: stats.twovstwoWins,
+    }));
+  }, [allStats]);
 
-    return ranked;
-  }, [hydrated, players, getPlayerWins, activeTab]);
+  const sortedOverall = useMemo(() => sortRows(overallRows, overallSort), [overallRows, overallSort]);
+  const sortedAmericano = useMemo(() => sortRows(americanoRows, americanoSort), [americanoRows, americanoSort]);
+  const sortedNormal = useMemo(() => sortRows(normalRows, normalSort), [normalRows, normalSort]);
 
   if (!hydrated) {
     return (
@@ -87,18 +188,18 @@ export default function RankingsPage() {
 
   return (
     <div className="p-4 pt-6 pb-24 animate-fade-in">
-      <h1 className="text-3xl font-bold gradient-text mb-6">Ranglisten</h1>
+      <h1 className="text-3xl font-bold gradient-text mb-5">Ranglisten</h1>
 
-      {/* Tab pills */}
-      <div className="flex gap-2 overflow-x-auto pb-3 mb-6 scrollbar-none">
-        {TABS.map((tab) => (
+      {/* Category tabs */}
+      <div className="glass-card-static flex gap-1 rounded-2xl p-1 mb-5">
+        {CATEGORY_TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-300 ${
-              activeTab === tab.key
-                ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-[0_0_20px_rgba(139,92,246,0.3)] rounded-full'
-                : 'glass-card-static text-white/40 hover:text-white/70 rounded-full'
+            onClick={() => setCategory(tab.key)}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${
+              category === tab.key
+                ? 'bg-violet-500/15 text-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.15)]'
+                : 'text-white/40 hover:text-white/70'
             }`}
           >
             {tab.label}
@@ -106,65 +207,177 @@ export default function RankingsPage() {
         ))}
       </div>
 
-      {/* Leaderboard */}
-      {rankings.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-60 animate-fade-in-up">
-          <svg className="w-16 h-16 mb-4 text-white/15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2m21-2a3 3 0 11-6 0 3 3 0 016 0zm-9 7a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-          <p className="text-lg font-medium text-white/40">Noch keine Spieler</p>
-          <p className="text-sm mt-1 text-white/25">Füge Spieler hinzu, um Ranglisten zu sehen</p>
+      {/* Overall */}
+      {category === 'overall' && (
+        <div className="animate-fade-in-up">
+          <SortPills cols={OVERALL_COLS} activeKey={overallSort} setKey={setOverallSort} />
+          <RankTable<OverallRow>
+            rows={sortedOverall}
+            cols={OVERALL_COLS}
+            activeKey={overallSort}
+            formatValue={(key, val) =>
+              key === 'gameWinPct' || key === 'tournamentWinPct' ? formatPct(val) : String(val)
+            }
+          />
         </div>
-      ) : (
-        <div className="space-y-2 animate-fade-in-up">
-          {rankings.map((entry, index) => {
-            const isTop3 = entry.rank <= 3;
-            const medalColor = isTop3 ? MEDAL_COLORS[entry.rank - 1] : undefined;
-            const medalBorder = isTop3 ? MEDAL_BORDER_STYLES[entry.rank] : '';
+      )}
 
-            return (
-              <div
-                key={entry.player.id}
-                className={`glass-card-static rounded-2xl flex items-center gap-4 p-4 transition-all duration-300 animate-fade-in-up ${
-                  index < 6 ? `stagger-${index + 1}` : ''
-                } ${medalBorder}`}
-              >
-                {/* Rank */}
-                <div className="w-10 shrink-0 text-center">
-                  <span
-                    className="text-2xl font-bold"
-                    style={medalColor ? { color: medalColor } : { color: 'rgba(255,255,255,0.25)' }}
-                  >
-                    {entry.rank}
-                  </span>
-                </div>
+      {/* Americano */}
+      {category === 'americano' && (
+        <div className="animate-fade-in-up">
+          <SortPills cols={AMERICANO_COLS} activeKey={americanoSort} setKey={setAmericanoSort} />
+          <RankTable<AmericanoRow>
+            rows={sortedAmericano}
+            cols={AMERICANO_COLS}
+            activeKey={americanoSort}
+            formatValue={(key, val) => (key === 'avgPoints' ? formatAvg(val) : String(val))}
+          />
+        </div>
+      )}
 
-                {/* Avatar */}
-                <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0"
-                  style={{ backgroundColor: hashColor(entry.player.name) }}
+      {/* Normal */}
+      {category === 'normal' && (
+        <div className="animate-fade-in-up">
+          <SortPills cols={NORMAL_COLS} activeKey={normalSort} setKey={setNormalSort} />
+          <RankTable<NormalRow>
+            rows={sortedNormal}
+            cols={NORMAL_COLS}
+            activeKey={normalSort}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Sort pill bar ─── */
+function SortPills<T>({
+  cols,
+  activeKey,
+  setKey,
+}: {
+  cols: { key: SortKey<T>; label: string }[];
+  activeKey: SortKey<T>;
+  setKey: (k: SortKey<T>) => void;
+}) {
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
+      {cols.map((col) => (
+        <button
+          key={String(col.key)}
+          onClick={() => setKey(col.key)}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-300 ${
+            activeKey === col.key
+              ? 'bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-[0_0_16px_rgba(139,92,246,0.25)]'
+              : 'glass-card-static text-white/40 hover:text-white/70'
+          }`}
+        >
+          {col.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Ranking table ─── */
+function RankTable<T extends { playerId: string; name: string }>({
+  rows,
+  cols,
+  activeKey,
+  formatValue,
+}: {
+  rows: T[];
+  cols: { key: SortKey<T>; short: string }[];
+  activeKey: SortKey<T>;
+  formatValue?: (key: SortKey<T>, val: number) => string;
+}) {
+  // Assign ranks with tie-breaking
+  const ranks: number[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (i === 0 || (rows[i][activeKey] as number) !== (rows[i - 1][activeKey] as number)) {
+      ranks.push(i + 1);
+    } else {
+      ranks.push(ranks[i - 1]);
+    }
+  }
+
+  const colWidths = cols.map(() => 'minmax(2rem, 2.5rem)').join(' ');
+  const gridCols = `1.8rem 1.8rem 1fr ${colWidths}`;
+
+  return (
+    <div className="glass-card-static rounded-2xl overflow-x-auto">
+      {/* Header */}
+      <div
+        className="grid items-center gap-1.5 px-3 py-2.5 border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-wider text-white/25"
+        style={{ gridTemplateColumns: gridCols, minWidth: '340px' }}
+      >
+        <span>#</span>
+        <span />
+        <span>Spieler</span>
+        {cols.map((col) => (
+          <span
+            key={String(col.key)}
+            className={`text-center ${activeKey === col.key ? 'text-violet-400' : ''}`}
+          >
+            {col.short}
+          </span>
+        ))}
+      </div>
+
+      {/* Rows */}
+      {rows.map((row, i) => {
+        const rank = ranks[i];
+        const isTop3 = rank <= 3;
+        const medalColor = isTop3 ? MEDAL_COLORS[rank - 1] : undefined;
+        const borderClass =
+          rank === 1
+            ? 'border-l-2 border-amber-500 bg-amber-500/[0.06]'
+            : rank === 2
+            ? 'border-l-2 border-white/30 bg-white/[0.02]'
+            : rank === 3
+            ? 'border-l-2 border-orange-600 bg-orange-500/[0.04]'
+            : 'border-l-2 border-transparent';
+
+        return (
+          <div
+            key={row.playerId}
+            className={`grid items-center gap-1.5 px-3 py-2.5 border-t border-white/[0.04] ${borderClass}`}
+            style={{ gridTemplateColumns: gridCols, minWidth: '340px' }}
+          >
+            <span
+              className="text-xs font-bold text-center"
+              style={medalColor ? { color: medalColor } : { color: 'rgba(255,255,255,0.25)' }}
+            >
+              {rank}
+            </span>
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+              style={{ backgroundColor: hashColor(row.name) }}
+            >
+              {getInitials(row.name)}
+            </div>
+            <span className="text-sm font-medium truncate text-white/90">{row.name}</span>
+            {cols.map((col) => {
+              const val = row[col.key] as number;
+              const isActive = activeKey === col.key;
+              const display = formatValue ? formatValue(col.key, val) : String(val);
+              return (
+                <span
+                  key={String(col.key)}
+                  className={`text-xs text-center tabular-nums ${
+                    isActive ? 'font-bold text-violet-400' : 'text-white/40'
+                  }`}
                 >
-                  {getInitials(entry.player.name)}
-                </div>
+                  {display}
+                </span>
+              );
+            })}
+          </div>
+        );
+      })}
 
-                {/* Name */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-white/90 font-medium truncate">{entry.player.name}</p>
-                </div>
-
-                {/* Value */}
-                <div className="text-right shrink-0 min-w-[2.5rem]">
-                  <span
-                    className="text-2xl font-bold tabular-nums"
-                    style={medalColor ? { color: medalColor } : { color: 'rgba(255,255,255,0.40)' }}
-                  >
-                    {entry.stats[activeTab]}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      {rows.length === 0 && (
+        <div className="px-4 py-8 text-center text-white/25 text-sm">Noch keine Spieler</div>
       )}
     </div>
   );

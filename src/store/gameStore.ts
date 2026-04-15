@@ -40,9 +40,15 @@ interface GameStore {
     americanoPoints: number;
     americanoWins: number;
     americanoTournamentWins: number;
+    americanoTournamentsPlayed: number;
+    americanoGamesPlayed: number;
+    americanoNormalizedPoints: number;
     twovstwoWins: number;
+    twovstwoPlayed: number;
     onevoneWins: number;
+    onevonePlayed: number;
     tournamentWins: number;
+    tournamentsPlayed: number;
   };
 }
 
@@ -113,9 +119,15 @@ export const useGameStore = create<GameStore>()((set, get) => ({
         let americanoPoints = 0;
         let americanoWins = 0;
         let americanoTournamentWins = 0;
+        let americanoTournamentsPlayed = 0;
+        let americanoGamesPlayed = 0;
+        let americanoNormalizedPoints = 0;
         let twovstwoWins = 0;
+        let twovstwoPlayed = 0;
         let onevoneWins = 0;
+        let onevonePlayed = 0;
         let tournamentWins = 0;
+        let tournamentsPlayed = 0;
 
         for (const game of games) {
           if (game.type === '1vs1') {
@@ -125,6 +137,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
             if (!isP1 && !isP2) continue;
             if (m.status === 'completed') {
               gamesPlayed++;
+              onevonePlayed++;
               if (m.winner === 1 && isP1) onevoneWins++;
               if (m.winner === 2 && isP2) onevoneWins++;
             }
@@ -137,6 +150,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
             if (!isInGame) continue;
             if (m.status === 'completed') {
               gamesPlayed++;
+              twovstwoPlayed++;
               if (m.winner === 1 && m.team1.includes(playerId)) twovstwoWins++;
               if (m.winner === 2 && m.team2.includes(playerId)) twovstwoWins++;
             }
@@ -145,6 +159,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
           if (game.type === '2vs2-tournament') {
             const t = game as Tournament;
             if (!t.players.includes(playerId)) continue;
+            tournamentsPlayed++;
             const completedMatches = t.matches.filter(
               (m) => m.status === 'completed'
             );
@@ -158,7 +173,6 @@ export const useGameStore = create<GameStore>()((set, get) => ({
                 gamesPlayed++;
               }
             }
-            // Check if player's team won the tournament
             if (t.status === 'completed' && t.winner) {
               const winnerTeam = t.teams.find((tm) => tm.id === t.winner);
               if (winnerTeam?.players.includes(playerId)) {
@@ -173,6 +187,7 @@ export const useGameStore = create<GameStore>()((set, get) => ({
           ) {
             const a = game as AmericanoTournament;
             if (!a.players.includes(playerId)) continue;
+            americanoTournamentsPlayed++;
 
             for (const ag of a.games) {
               if (ag.status !== 'completed') continue;
@@ -181,18 +196,21 @@ export const useGameStore = create<GameStore>()((set, get) => ({
               if (!inTeam1 && !inTeam2) continue;
 
               gamesPlayed++;
+              americanoGamesPlayed++;
+              const ptw = a.pointsToWin || 10;
               if (inTeam1) {
                 americanoPoints += ag.team1Score;
+                americanoNormalizedPoints += (ag.team1Score / ptw) * 10;
                 if (ag.team1Score > ag.team2Score) americanoWins++;
               }
               if (inTeam2) {
                 americanoPoints += ag.team2Score;
+                americanoNormalizedPoints += (ag.team2Score / ptw) * 10;
                 if (ag.team2Score > ag.team1Score) americanoWins++;
               }
             }
 
             // Check if player won the americano tournament
-            // Use average points per game when players have unequal game counts
             if (a.status === 'completed') {
               const playerScores = new Map<string, number>();
               const playerGameCounts = new Map<string, number>();
@@ -207,7 +225,6 @@ export const useGameStore = create<GameStore>()((set, get) => ({
                   playerGameCounts.set(pid, (playerGameCounts.get(pid) || 0) + 1);
                 }
               }
-              // Check if all players have equal game counts
               const counts = [...playerGameCounts.values()];
               const allEqual = counts.every((c) => c === counts[0]);
 
@@ -231,9 +248,15 @@ export const useGameStore = create<GameStore>()((set, get) => ({
           americanoPoints,
           americanoWins,
           americanoTournamentWins,
+          americanoTournamentsPlayed,
+          americanoGamesPlayed,
+          americanoNormalizedPoints: Math.round(americanoNormalizedPoints * 100) / 100,
           twovstwoWins,
+          twovstwoPlayed,
           onevoneWins,
+          onevonePlayed,
           tournamentWins,
+          tournamentsPlayed,
         };
       },
     })
