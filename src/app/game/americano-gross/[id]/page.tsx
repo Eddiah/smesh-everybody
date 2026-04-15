@@ -139,29 +139,23 @@ export default function AmericanoGrossLivePage() {
     <div className="min-h-screen text-white animate-fade-in">
       <div className="max-w-lg mx-auto px-4 py-6">
         {/* Header */}
-        <div className="mb-4 animate-fade-in-up stagger-1">
+        <div className="flex items-center gap-3 mb-4 animate-fade-in-up stagger-1">
           <button
-            onClick={() => router.push('/')}
-            className="glass-card-static px-3 py-1.5 rounded-2xl text-sm text-white/60 hover:bg-white/[0.06] mb-3 flex items-center gap-1.5 transition-all"
+            onClick={() => router.back()}
+            className="glass-card-static p-2.5 rounded-2xl hover:bg-white/[0.06] transition-all"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
-            Zurück
           </button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold gradient-text">Americano Groß</h1>
-              <p className="text-xs text-white/40">
-                Runde {tournament.currentRound + 1} von {totalRounds} •{' '}
-                {tournament.pointsToWin} Pkt.
-              </p>
-            </div>
-            {tournament.status === 'completed' && (
-              <span className="pill bg-rose-500/15 text-rose-400">
-                Abgeschlossen
-              </span>
-            )}
+          <div className="flex-1">
+            <h1 className="text-xl font-bold gradient-text">Americano Groß</h1>
+            <p className="text-sm text-white/40">
+              {tournament.players.length} Spieler · Runde {tournament.currentRound + 1}/{totalRounds} · {tournament.pointsToWin} Pkt.
+              {tournament.status === 'completed' && (
+                <span className="ml-2 text-rose-400 font-medium">Abgeschlossen</span>
+              )}
+            </p>
           </div>
         </div>
 
@@ -380,11 +374,11 @@ function GameCard({
     <CourtCard
       team1Players={[
         `${team1Won ? '👑 ' : ''}${playerName(game.team1[0])}`,
-        playerName(game.team1[1]),
+        `${team1Won ? '👑 ' : ''}${playerName(game.team1[1])}`,
       ]}
       team2Players={[
         `${team2Won ? '👑 ' : ''}${playerName(game.team2[0])}`,
-        playerName(game.team2[1]),
+        `${team2Won ? '👑 ' : ''}${playerName(game.team2[1])}`,
       ]}
       courtNumber={game.court + 1}
       accentColor="rose"

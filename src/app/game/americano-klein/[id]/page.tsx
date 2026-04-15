@@ -185,6 +185,19 @@ export default function AmericanoKleinTournamentPage() {
           </div>
         </div>
 
+        {/* Winner banner */}
+        {tournament.status === 'completed' && leaderboard.length > 0 && (
+          <div className="glass-card-static rounded-2xl p-5 mb-4 text-center animate-fade-in-scale" style={{ borderColor: 'rgba(168,85,247,0.2)' }}>
+            <div className="text-3xl mb-2">🏆</div>
+            <div className="font-bold text-xl gradient-text">
+              {playerName(leaderboard[0].playerId)}
+            </div>
+            <div className="text-xs text-white/40 mt-1">
+              {usingAvg ? `⌀ ${leaderboard[0].avgPoints.toFixed(1)} Pkt./Spiel` : `${leaderboard[0].points} Punkte`} • {leaderboard[0].wins} Siege
+            </div>
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="glass-card-static flex gap-1 mb-6 rounded-2xl p-1 animate-fade-in-up stagger-2">
           {(['games', 'standings'] as const).map((tab) => (
@@ -374,8 +387,8 @@ function GameCard({
 
   return (
     <CourtCard
-      team1Players={[playerName(game.team1[0]), playerName(game.team1[1])]}
-      team2Players={[playerName(game.team2[0]), playerName(game.team2[1])]}
+      team1Players={[`${team1Wins ? '👑 ' : ''}${playerName(game.team1[0])}`, `${team1Wins ? '👑 ' : ''}${playerName(game.team1[1])}`]}
+      team2Players={[`${team2Wins ? '👑 ' : ''}${playerName(game.team2[0])}`, `${team2Wins ? '👑 ' : ''}${playerName(game.team2[1])}`]}
       courtNumber={game.court + 1}
       accentColor="amber"
       completed={isCompleted}
