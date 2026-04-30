@@ -102,6 +102,18 @@ export default function AmericanoGrossLivePage() {
     [tournament, id, updateGame]
   );
 
+  // Finish tournament early: complete all open games at current scores
+  const handleFinishTournamentEarly = useCallback(() => {
+    if (!tournament) return;
+    updateGame(id, (g) => {
+      const t = g as AmericanoTournament;
+      const updatedGames = t.games.map((game) =>
+        game.status !== 'completed' ? { ...game, status: 'completed' as const } : game
+      );
+      return { ...t, games: updatedGames, status: 'completed' as const };
+    });
+  }, [tournament, id, updateGame]);
+
   const leaderboard = useMemo(() => {
     if (!tournament) return [];
     return getAmericanoLeaderboard(tournament.games, tournament.players);
@@ -237,6 +249,21 @@ export default function AmericanoGrossLivePage() {
                 </div>
               );
             })}
+
+            {/* Finish tournament early button */}
+            {!allCompleted && tournament.status !== 'completed' && (
+              <div className="pt-4 border-t border-white/[0.06]">
+                <button
+                  onClick={handleFinishTournamentEarly}
+                  className="w-full py-3 text-sm font-semibold rounded-2xl border border-rose-500/30 text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 transition-all"
+                >
+                  ⏱ Turnier vorzeitig beenden
+                </button>
+                <p className="text-[11px] text-white/30 text-center mt-2">
+                  Beendet alle offenen Spiele beim aktuellen Stand
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -345,6 +372,10 @@ function GameCard({
   const canComplete =
     !isCompleted &&
     (game.team1Score === pointsToWin || game.team2Score === pointsToWin);
+  const canFinishEarly =
+    !isCompleted &&
+    !canComplete &&
+    (game.team1Score > 0 || game.team2Score > 0);
 
   const team1Won = isCompleted && game.team1Score > game.team2Score;
   const team2Won = isCompleted && game.team2Score > game.team1Score;
@@ -389,14 +420,23 @@ function GameCard({
       statusBadge={isCompleted ? (
         <span className="text-[10px] font-medium text-white/25">Abgeschlossen</span>
       ) : undefined}
-      footer={canComplete ? (
-        <button
-          onClick={() => onComplete(game.id)}
-          className="btn-primary w-full py-2.5 text-sm font-semibold"
-        >
-          Spiel beenden
-        </button>
-      ) : undefined}
+      footer={
+        canComplete ? (
+          <button
+            onClick={() => onComplete(game.id)}
+            className="btn-primary w-full py-2.5 text-sm font-semibold"
+          >
+            Spiel beenden
+          </button>
+        ) : canFinishEarly ? (
+          <button
+            onClick={() => onComplete(game.id)}
+            className="w-full py-2.5 text-sm font-semibold rounded-xl border border-rose-500/30 text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 transition-all"
+          >
+            Vorzeitig beenden
+          </button>
+        ) : undefined
+      }
     />
   );
 }

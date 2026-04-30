@@ -148,6 +148,26 @@ export default function Match2vs2Page() {
     [match, updateGame]
   );
 
+  const handleFinishEarly = useCallback(() => {
+    if (!match || match.status === 'completed') return;
+    updateGame(match.id, (game) => {
+      const m = { ...game } as Match2vs2;
+      const [s1, s2] = getSetsScore(m.sets);
+      let winner: 1 | 2;
+      if (s1 > s2) {
+        winner = 1;
+      } else if (s2 > s1) {
+        winner = 2;
+      } else {
+        const currentSet = m.sets[m.sets.length - 1];
+        winner = currentSet && currentSet.team1Games >= currentSet.team2Games ? 1 : 2;
+      }
+      m.winner = winner;
+      m.status = 'completed';
+      return m;
+    });
+  }, [match, updateGame]);
+
   if (!hydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -368,6 +388,14 @@ export default function Match2vs2Page() {
               )}
             </>
           )}
+
+          {/* Finish match early button */}
+          <button
+            onClick={handleFinishEarly}
+            className="w-full py-3 mt-4 text-sm font-semibold rounded-2xl border border-white/10 text-white/50 bg-white/[0.03] hover:bg-white/[0.06] hover:text-white/70 transition-all"
+          >
+            ⏱ Match vorzeitig beenden
+          </button>
         </div>
       )}
 

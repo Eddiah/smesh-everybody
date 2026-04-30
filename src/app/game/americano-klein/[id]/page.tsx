@@ -137,6 +137,18 @@ export default function AmericanoKleinTournamentPage() {
     });
   }, [tournament, tournamentId, updateGame]);
 
+  // Finish tournament early: complete all open games at current scores
+  const handleFinishTournamentEarly = useCallback(() => {
+    if (!tournament) return;
+    updateGame(tournamentId, (record) => {
+      const t = { ...record } as AmericanoTournament;
+      const games = t.games.map((g) =>
+        g.status !== 'completed' ? { ...g, status: 'completed' as const } : g
+      );
+      return { ...t, games, status: 'completed' as const };
+    });
+  }, [tournament, tournamentId, updateGame]);
+
   if (!hydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -280,6 +292,21 @@ export default function AmericanoKleinTournamentPage() {
                 </div>
               );
             })}
+
+            {/* Finish tournament early button */}
+            {!isTournamentComplete && tournament.status !== 'completed' && (
+              <div className="pt-4 border-t border-white/[0.06]">
+                <button
+                  onClick={handleFinishTournamentEarly}
+                  className="w-full py-3 text-sm font-semibold rounded-2xl border border-amber-500/30 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-all"
+                >
+                  ⏱ Turnier vorzeitig beenden
+                </button>
+                <p className="text-[11px] text-white/30 text-center mt-2">
+                  Beendet alle offenen Spiele beim aktuellen Stand
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -384,6 +411,10 @@ function GameCard({
   const canComplete =
     !isCompleted &&
     (game.team1Score === pointsToWin || game.team2Score === pointsToWin);
+  const canFinishEarly =
+    !isCompleted &&
+    !canComplete &&
+    (game.team1Score > 0 || game.team2Score > 0);
 
   return (
     <CourtCard
@@ -421,14 +452,23 @@ function GameCard({
       statusBadge={isCompleted ? (
         <span className="text-[10px] font-medium text-white/25">Abgeschlossen</span>
       ) : undefined}
-      footer={canComplete ? (
-        <button
-          onClick={() => onComplete(game.id)}
-          className="btn-primary w-full py-2.5 text-sm font-semibold"
-        >
-          Spiel beenden
-        </button>
-      ) : undefined}
+      footer={
+        canComplete ? (
+          <button
+            onClick={() => onComplete(game.id)}
+            className="btn-primary w-full py-2.5 text-sm font-semibold"
+          >
+            Spiel beenden
+          </button>
+        ) : canFinishEarly ? (
+          <button
+            onClick={() => onComplete(game.id)}
+            className="w-full py-2.5 text-sm font-semibold rounded-xl border border-amber-500/30 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-all"
+          >
+            Vorzeitig beenden
+          </button>
+        ) : undefined
+      }
     />
   );
 }
