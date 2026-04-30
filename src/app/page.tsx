@@ -59,7 +59,7 @@ function getPlayerNames(game: GameRecord, getPlayer: (id: string) => { name: str
     playerIds = game.players;
   }
 
-  return playerIds
+  return [...new Set(playerIds)]
     .map((id) => getPlayer(id)?.name ?? 'Unbekannt')
     .join(', ');
 }
@@ -75,11 +75,11 @@ function getGameWinner(game: GameRecord, getPlayer: (id: string) => { name: stri
 
   if (game.type === '2vs2') {
     if (game.winner === 1) {
-      const names = game.team1.map((id) => getPlayer(id)?.name ?? '?');
+      const names = [...new Set(game.team1)].map((id) => getPlayer(id)?.name ?? '?');
       return names.join(' & ');
     }
     if (game.winner === 2) {
-      const names = game.team2.map((id) => getPlayer(id)?.name ?? '?');
+      const names = [...new Set(game.team2)].map((id) => getPlayer(id)?.name ?? '?');
       return names.join(' & ');
     }
     return null;

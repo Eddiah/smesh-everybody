@@ -74,23 +74,21 @@ function Match1vs1Card({ game }: { game: Match1vs1 }) {
 
 function Match2vs2Card({ game }: { game: Match2vs2 }) {
   const getPlayer = useGameStore((s) => s.getPlayer);
-  const t1p1 = getPlayer(game.team1[0])?.name ?? '?';
-  const t1p2 = getPlayer(game.team1[1])?.name ?? '?';
-  const t2p1 = getPlayer(game.team2[0])?.name ?? '?';
-  const t2p2 = getPlayer(game.team2[1])?.name ?? '?';
+  const team1Names = [...new Set(game.team1)].map((id) => getPlayer(id)?.name ?? '?').join(' & ');
+  const team2Names = [...new Set(game.team2)].map((id) => getPlayer(id)?.name ?? '?').join(' & ');
   const [team1Sets, team2Sets] = getSetsScore(game.sets);
 
   return (
     <div className="mt-4 space-y-2">
       <div className="flex items-center justify-between">
         <div className={`flex-1 text-sm ${game.winner === 1 ? 'text-violet-400 font-semibold' : 'text-white/60'}`}>
-          {t1p1} &amp; {t1p2}
+          {team1Names}
         </div>
         <span className="text-sm font-mono font-bold text-white/90 mx-3">
           {team1Sets} - {team2Sets}
         </span>
         <div className={`flex-1 text-sm text-right ${game.winner === 2 ? 'text-violet-400 font-semibold' : 'text-white/60'}`}>
-          {t2p1} &amp; {t2p2}
+          {team2Names}
         </div>
       </div>
       {game.sets.length > 0 && (

@@ -223,7 +223,9 @@ export default function Match2vs2Page() {
             <div className="text-center mb-4">
               <p className="text-xs text-blue-400 font-semibold uppercase tracking-wider mb-1">Team 1</p>
               <p className="text-sm font-medium text-white/90">{playerName(match.team1[0])}</p>
-              <p className="text-sm font-medium text-white/90">{playerName(match.team1[1])}</p>
+              {match.team1[0] !== match.team1[1] && (
+                <p className="text-sm font-medium text-white/90">{playerName(match.team1[1])}</p>
+              )}
             </div>
 
             {/* Sets Score */}
@@ -248,7 +250,9 @@ export default function Match2vs2Page() {
             <div className="text-center mt-4">
               <p className="text-xs text-amber-400 font-semibold uppercase tracking-wider mb-1">Team 2</p>
               <p className="text-sm font-medium text-white/90">{playerName(match.team2[0])}</p>
-              <p className="text-sm font-medium text-white/90">{playerName(match.team2[1])}</p>
+              {match.team2[0] !== match.team2[1] && (
+                <p className="text-sm font-medium text-white/90">{playerName(match.team2[1])}</p>
+              )}
             </div>
           </div>
         </CourtSurface>
@@ -408,8 +412,8 @@ export default function Match2vs2Page() {
           </p>
           <p className="text-sm text-white/40">
             {match.winner === 1
-              ? `${playerName(match.team1[0])} & ${playerName(match.team1[1])}`
-              : `${playerName(match.team2[0])} & ${playerName(match.team2[1])}`}
+              ? [...new Set(match.team1)].map((id) => playerName(id)).join(' & ')
+              : [...new Set(match.team2)].map((id) => playerName(id)).join(' & ')}
           </p>
           <Link
             href="/"
@@ -430,8 +434,8 @@ export default function Match2vs2Page() {
             </h2>
             <p className="text-white/60 mb-1 font-medium">
               {match.winner === 1
-                ? `${playerName(match.team1[0])} & ${playerName(match.team1[1])}`
-                : `${playerName(match.team2[0])} & ${playerName(match.team2[1])}`}
+                ? [...new Set(match.team1)].map((id) => playerName(id)).join(' & ')
+                : [...new Set(match.team2)].map((id) => playerName(id)).join(' & ')}
             </p>
             <div className="flex items-center justify-center gap-2 mt-4 mb-6">
               {match.sets.filter((s) => isSetComplete(s)).map((set, i) => (
